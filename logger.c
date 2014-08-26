@@ -210,6 +210,8 @@ int main(int argc, char *argv[])
                 max_fd = evdev_fd[i]+1;
         }
 
+        if (max_fd == 0) break;
+
         retval = select(max_fd, &rfds, NULL, NULL, NULL);
 
         if (retval == -1) {
@@ -232,6 +234,7 @@ int main(int argc, char *argv[])
             else
             {
                 perror("read()");
+                evdev_fd[i] = 0;
                 break;
             }
         }
@@ -245,6 +248,5 @@ int main(int argc, char *argv[])
             close(evdev_fd[i]);
     }
 
-    perror("read");
     return EXIT_FAILURE;
 }
