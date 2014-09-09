@@ -151,7 +151,8 @@ int main(int argc, char *argv[])
         close(STDOUT_FILENO);
     }
 
-    memset(evdev_fd, 0, sizeof(evdev_fd));
+    for (i = 0; i < MAX_EVDEV; ++i)
+        evdev_fd[i] = -1;
 
     for (i = 0; i < MAX_EVDEV; ++i)
     {
@@ -203,7 +204,7 @@ int main(int argc, char *argv[])
         FD_ZERO(&rfds);
 
         for (i = 0; i < MAX_EVDEV; ++i) {
-            if (evdev_fd[i] == 0) continue;
+            if (evdev_fd[i] == -1) continue;
 
             FD_SET(evdev_fd[i], &rfds);
             if (max_fd < evdev_fd[i]+1)
@@ -220,7 +221,7 @@ int main(int argc, char *argv[])
         }
 
         for (i = 0; i < MAX_EVDEV; ++i) {
-            if (evdev_fd[i] == 0) continue;
+            if (evdev_fd[i] == -1) continue;
             if (!FD_ISSET(evdev_fd[i], &rfds)) continue;
 
             memset(&state, 0, sizeof(state));
@@ -234,7 +235,7 @@ int main(int argc, char *argv[])
             else
             {
                 perror("read()");
-                evdev_fd[i] = 0;
+                evdev_fd[i] = -1;
                 break;
             }
         }
@@ -244,7 +245,7 @@ int main(int argc, char *argv[])
 
     for (i = 0; i < MAX_EVDEV; ++i)
     {
-        if (evdev_fd[i] != 0)
+        if (evdev_fd[i] != -1)
             close(evdev_fd[i]);
     }
 
