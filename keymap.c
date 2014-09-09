@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
@@ -55,7 +56,7 @@ static int is_func_key(unsigned int code)
     assert(code < sizeof(char_or_func));
     return char_or_func[code] == 'f';
 }
-static int is_used_key(unsigned int code)
+int is_used_key(unsigned int code)
 {
     assert(code < sizeof(char_or_func));
     return char_or_func[code] != '_';

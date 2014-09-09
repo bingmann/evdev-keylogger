@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include <getopt.h>
 #include <sys/types.h>
 #include <sys/select.h>

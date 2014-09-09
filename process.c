@@ -1,8 +1,10 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <grp.h>
 #include <sys/resource.h>
 #include <sys/prctl.h>
 #include "process.h"
