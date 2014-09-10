@@ -128,31 +128,34 @@ size_t translate_eventw(struct input_event *event,
     wchar_t wch;
     size_t len = 0;
 
-    if (event->type != EV_KEY)
-        return len;
-
-    if (event->code >= sizeof(char_or_func)) {
-        len += swprintf(&wbuffer[len], wbuffer_len, L"<E-%x>", event->code);
-        return len;
+    if (event->type != EV_KEY) {
+        // not a keyboard event
     }
-
-    if (event->value == EV_MAKE || event->value == EV_REPEAT) {
+    else if (event->code >= sizeof(char_or_func)) {
+        len += swprintf(&wbuffer[len], wbuffer_len, L"<E-%x>", event->code);
+    }
+    else if (event->value == EV_MAKE || event->value == EV_REPEAT) {
         if (event->code == KEY_LEFTSHIFT || event->code == KEY_RIGHTSHIFT) {
             state->shift = 1;
             return len;
-        } else if (event->code == KEY_RIGHTALT) {
+        }
+        else if (event->code == KEY_RIGHTALT) {
             state->altgr = 1;
             return len;
-        } else if (event->code == KEY_LEFTALT) {
+        }
+        else if (event->code == KEY_LEFTALT) {
             state->alt = 1;
             return len;
-        } else if (event->code == KEY_LEFTCTRL || event->code == KEY_RIGHTCTRL) {
+        }
+        else if (event->code == KEY_LEFTCTRL || event->code == KEY_RIGHTCTRL) {
             state->ctrl = 1;
             return len;
-        } else if (event->code == KEY_LEFTMETA || event->code == KEY_RIGHTMETA) {
+        }       
+        else if (event->code == KEY_LEFTMETA || event->code == KEY_RIGHTMETA) {
             state->meta = 1;
             return len;
-        } else {
+        }
+        else {
             if (state->ctrl && state->alt && state->meta)
                 len += swprintf(&wbuffer[len], wbuffer_len, L"<CTRL,ALT,META>+");
             else if (state->ctrl && state->alt)
@@ -188,19 +191,16 @@ size_t translate_eventw(struct input_event *event,
 
             if (wch != L'\0') {
                 len += swprintf(&wbuffer[len], wbuffer_len, L"%lc", wch);
-                return len;
             }
         }
         else if (is_func_key(event->code)) {
             len += swprintf(&wbuffer[len], wbuffer_len, L"%ls", func_keys[to_func_keys_index(event->code)]);
-            return len;
         }
         else {
             len += swprintf(&wbuffer[len], wbuffer_len, L"<E-%x>", event->code);
-            return len;
         }
     }
-    if (event->value == EV_BREAK) {
+    else if (event->value == EV_BREAK) {
         if (event->code == KEY_LEFTSHIFT || event->code == KEY_RIGHTSHIFT)
             state->shift = 0;
         else if (event->code == KEY_RIGHTALT)
