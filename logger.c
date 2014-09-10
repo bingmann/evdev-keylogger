@@ -226,15 +226,17 @@ int main(int argc, char *argv[])
             if (!FD_ISSET(evdev_fd[i], &rfds)) continue;
 
             memset(&state, 0, sizeof(state));
-            if (read(evdev_fd[i], &ev, sizeof(ev)) > 0)
+            ssize_t rb;
+
+            while ( (rb = read(evdev_fd[i], &ev, sizeof(ev))) > 0 )
             {
                 if (translate_event(&ev, &state, buffer, sizeof(buffer)) > 0) {
                     fprintf(log, "%s", buffer);
                     fflush(log);
                 }
             }
-            else
-            {
+
+            if (rb < 0) {
                 perror("read()");
                 evdev_fd[i] = -1;
                 break;
