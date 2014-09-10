@@ -121,39 +121,37 @@ static int to_func_keys_index(unsigned int keycode)
  * pointed to by buffer. Stores state originating from sequence of event structs
  * in struc input_event_state *state. Returns the number of bytes written to buffer.
  */
-size_t translate_event(struct input_event *event, struct input_event_state *state, char *buffer, size_t buffer_len)
+size_t translate_eventw(struct input_event *event,
+                        struct input_event_state *state,
+                        wchar_t *wbuffer, size_t wbuffer_len)
 {
-    wchar_t wch, *wbuffer;
-    size_t wbuffer_len, len;
-
-    len = 0;
-    wbuffer = (wchar_t*)buffer;
-    wbuffer_len = buffer_len / sizeof(wchar_t);
+    wchar_t wch;
+    size_t len = 0;
 
     if (event->type != EV_KEY)
-        goto out;
+        return len;
 
     if (event->code >= sizeof(char_or_func)) {
         len += swprintf(&wbuffer[len], wbuffer_len, L"<E-%x>", event->code);
-        goto out;
+        return len;
     }
 
     if (event->value == EV_MAKE || event->value == EV_REPEAT) {
         if (event->code == KEY_LEFTSHIFT || event->code == KEY_RIGHTSHIFT) {
             state->shift = 1;
-            goto out;
+            return len;
         } else if (event->code == KEY_RIGHTALT) {
             state->altgr = 1;
-            goto out;
+            return len;
         } else if (event->code == KEY_LEFTALT) {
             state->alt = 1;
-            goto out;
+            return len;
         } else if (event->code == KEY_LEFTCTRL || event->code == KEY_RIGHTCTRL) {
             state->ctrl = 1;
-            goto out;
+            return len;
         } else if (event->code == KEY_LEFTMETA || event->code == KEY_RIGHTMETA) {
             state->meta = 1;
-            goto out;
+            return len;
         } else {
             if (state->ctrl && state->alt && state->meta)
                 len += swprintf(&wbuffer[len], wbuffer_len, L"<CTRL,ALT,META>+");
@@ -190,16 +188,16 @@ size_t translate_event(struct input_event *event, struct input_event_state *stat
 
             if (wch != L'\0') {
                 len += swprintf(&wbuffer[len], wbuffer_len, L"%lc", wch);
-                goto out;
+                return len;
             }
         }
         else if (is_func_key(event->code)) {
             len += swprintf(&wbuffer[len], wbuffer_len, L"%ls", func_keys[to_func_keys_index(event->code)]);
-            goto out;
+            return len;
         }
         else {
             len += swprintf(&wbuffer[len], wbuffer_len, L"<E-%x>", event->code);
-            goto out;
+            return len;
         }
     }
     if (event->value == EV_BREAK) {
@@ -215,7 +213,22 @@ size_t translate_event(struct input_event *event, struct input_event_state *stat
             state->meta = 0;
     }
 
-out:
+    return len;
+}
+
+/* Translates event into multi-byte string description. */
+size_t translate_event(struct input_event *event,
+                       struct input_event_state *state,
+                       char *buffer, size_t buffer_len)
+{
+    wchar_t *wbuffer;
+    size_t wbuffer_len, len;
+
+    wbuffer = (wchar_t*)buffer;
+    wbuffer_len = buffer_len / sizeof(wchar_t);
+
+    len = translate_eventw(event, state, wbuffer, wbuffer_len);
+
     if (!len)
         *buffer = 0;
     else
