@@ -118,8 +118,9 @@ static int to_func_keys_index(unsigned int keycode)
 }
 
 /* Translates struct input_event *event into the string of size buffer_length
- * pointed to by buffer. Stores state originating from sequence of event structs
- * in struc input_event_state *state. Returns the number of bytes written to buffer.
+ * pointed to by buffer. Stores state originating from sequence of event
+ * structs in struc input_event_state *state. Returns the number of bytes
+ * written to buffer.
  */
 size_t translate_eventw(struct input_event *event,
                         struct input_event_state *state,
@@ -189,7 +190,11 @@ size_t translate_eventw(struct input_event *event,
             else
                 wch = char_keys[to_char_keys_index(event->code)];
 
-            if (wch != L'\0') {
+            if (wch == L'<') {
+                // escape < to <<, else parsing the output stream is impossible
+                len += swprintf(&wbuffer[len], wbuffer_len, L"<<");
+            }
+            else if (wch != L'\0') {
                 len += swprintf(&wbuffer[len], wbuffer_len, L"%lc", wch);
             }
         }
