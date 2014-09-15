@@ -61,14 +61,15 @@ static wchar_t func_keys[][8] = {
  * Source: KEY_* defines from <linux/input.h>
  */
 static const char char_or_func[] =
-    "_fccccccccccccff"
-    "ccccccccccccffcc"
-    "ccccccccccfccccc"
-    "ccccccffffffffff"
-    "ffffffffffffffff"
-    "ffff__cff_______"
-    "ffffffffffffffff"
-    "_______f_____fff";
+/*   0123456789ABCDEF */
+    "_fccccccccccccff"  /* 0 */
+    "ccccccccccccfFcc"  /* 1 */
+    "ccccccccccFccccc"  /* 2 */
+    "ccccccFfFfFfffff"  /* 3 */
+    "fffffFFfffffffff"  /* 4 */
+    "ffff__cff_______"  /* 5 */
+    "fFffFfffffffffff"  /* 6 */
+    "_______f_____FFF"; /* 7 */
 
 static int is_char_key(unsigned int code)
 {
@@ -78,7 +79,12 @@ static int is_char_key(unsigned int code)
 static int is_func_key(unsigned int code)
 {
     assert(code < sizeof(char_or_func));
-    return char_or_func[code] == 'f';
+    return char_or_func[code] == 'f' || char_or_func[code] == 'F';
+}
+static int is_modfunc_key(unsigned int code)
+{
+    assert(code < sizeof(char_or_func));
+    return char_or_func[code] == 'F';
 }
 int is_used_key(unsigned int code)
 {
@@ -152,6 +158,9 @@ size_t translate_eventw(struct input_event *event,
 {
     wchar_t wch;
     size_t len = 0;
+    static const size_t wprefix_len = 64;
+    wchar_t wprefix[wprefix_len];
+    wprefix[0] = 0;
 
     if (event->type != EV_KEY) {
         // not a keyboard event
@@ -162,39 +171,34 @@ size_t translate_eventw(struct input_event *event,
     else if (event->value == EV_MAKE || event->value == EV_REPEAT) {
         if (event->code == KEY_LEFTSHIFT || event->code == KEY_RIGHTSHIFT) {
             state->shift = 1;
-            return len;
         }
         else if (event->code == KEY_RIGHTALT) {
             state->altgr = 1;
-            return len;
         }
         else if (event->code == KEY_LEFTALT) {
             state->alt = 1;
-            return len;
         }
         else if (event->code == KEY_LEFTCTRL || event->code == KEY_RIGHTCTRL) {
             state->ctrl = 1;
-            return len;
         }       
         else if (event->code == KEY_LEFTMETA || event->code == KEY_RIGHTMETA) {
             state->meta = 1;
-            return len;
         }
         else {
             if (state->ctrl && state->alt && state->meta)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<CTRL,ALT,META>+");
+                swprintf(wprefix, wprefix_len, L"<CTRL,ALT,META>+");
             else if (state->ctrl && state->alt)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<CTRL,ALT>+");
+                swprintf(wprefix, wprefix_len, L"<CTRL,ALT>+");
             else if (state->alt && state->meta)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<ALT,META>+");
+                swprintf(wprefix, wprefix_len, L"<ALT,META>+");
             else if (state->ctrl && state->meta)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<CTRL,META>+");
+                swprintf(wprefix, wprefix_len, L"<CTRL,META>+");
             else if (state->meta)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<META>+");
+                swprintf(wprefix, wprefix_len, L"<META>+");
             else if (state->ctrl)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<CTRL>+");
+                swprintf(wprefix, wprefix_len, L"<CTRL>+");
             else if (state->alt)
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<ALT>+");
+                swprintf(wprefix, wprefix_len, L"<ALT>+");
         }
         if (is_char_key(event->code)) {
             if (state->altgr) {
@@ -216,17 +220,25 @@ size_t translate_eventw(struct input_event *event,
 
             if (wch == L'<') {
                 // escape < to <<, else parsing the output stream is impossible
-                len += swprintf(&wbuffer[len], wbuffer_len, L"<<");
+                len += swprintf(&wbuffer[len], wbuffer_len, L"%ls<<", wprefix);
             }
             else if (wch != L'\0') {
-                len += swprintf(&wbuffer[len], wbuffer_len, L"%lc", wch);
+                len += swprintf(&wbuffer[len], wbuffer_len, L"%ls%lc",
+                                wprefix, wch);
             }
         }
+        else if (is_modfunc_key(event->code)) {
+            if (event->value == EV_MAKE)
+                len += swprintf(&wbuffer[len], wbuffer_len, L"%ls%ls",
+                                wprefix, func_keys[to_func_keys_index(event->code)]);
+        }
         else if (is_func_key(event->code)) {
-            len += swprintf(&wbuffer[len], wbuffer_len, L"%ls", func_keys[to_func_keys_index(event->code)]);
+            len += swprintf(&wbuffer[len], wbuffer_len, L"%ls%ls",
+                            wprefix, func_keys[to_func_keys_index(event->code)]);
         }
         else {
-            len += swprintf(&wbuffer[len], wbuffer_len, L"<E-%x>", event->code);
+            len += swprintf(&wbuffer[len], wbuffer_len, L"%ls<E-%x>",
+                            wprefix, event->code);
         }
     }
     else if (event->value == EV_BREAK) {
